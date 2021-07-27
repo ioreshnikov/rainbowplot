@@ -36,6 +36,15 @@ class Fixtures:
             np.exp(-(x + 5)**2) * np.exp(-1j * -10 * x))
         return np.tile(u, (Fixtures.nt, 1))
 
+    @staticmethod
+    def chirped_pulse():
+        """
+        A chirped Gaussian pulse.
+        """
+        x = Fixtures.x
+        u = np.exp(-x**2/5**2) * np.exp(-1j * x**2)
+        return np.tile(u, (Fixtures.nt, 1))
+
 
 class SmokeTestCase(TestCase):
     def test_smoke(self):
@@ -43,4 +52,4 @@ class SmokeTestCase(TestCase):
         x = Fixtures.x
         u = Fixtures.two_monochromatic_gaussians()
 
-        rainbowplot(x, t, u, fmin=-10, fmax=+10, win=0.5, ssx=4, ssy=4)
+        rainbowplot(x, t, u, win=0.5, ssx=4, ssy=4)
