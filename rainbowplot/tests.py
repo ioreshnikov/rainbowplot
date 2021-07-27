@@ -1,6 +1,7 @@
 from unittest import TestCase
 
 import numpy as np
+import matplotlib.pyplot as plt
 
 from .plot import rainbowplot
 
@@ -50,6 +51,7 @@ class SmokeTestCase(TestCase):
     def test_smoke(self):
         t = Fixtures.t
         x = Fixtures.x
-        u = Fixtures.two_monochromatic_gaussians()
+        u = Fixtures.chirped_pulse()
 
         rainbowplot(x, t, u, win=0.5, ssx=4, ssy=4)
+        plt.show()

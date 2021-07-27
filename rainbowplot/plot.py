@@ -7,6 +7,8 @@ from numpy.fft import fftfreq, fftshift, ifft
 
 HUE_RED = 0.00
 HUE_VIOLET = 0.75
+SAT_FREQ_PADDING = 1/5
+WIN_DEFAULT = 1/100
 
 
 def _sigma(x):
@@ -24,15 +26,15 @@ def _estimate_frequency_range(f, z):
     u = abs(u)**2
     u = u.sum(axis=0)
 
-    threshold = 0.10 * u.max()
-
-    up = u[:-1]  # u₀, u₁, u₂, ..., uₙ₋₁
-    un = u[1:]   # u₁, u₂, u₃, ..., uₙ
-
     # We assume that the spectrum is bounded and we're looking for the
     # left-most position where the spectrum becomes greater than the threshold
     # and the right-most position where it again becomes smaller. Those two we
     # use as the estimates for the spectral width.
+
+    threshold = 0.10 * u.max()
+
+    up = u[:-1]  # u₀, u₁, u₂, ..., uₙ₋₁
+    un = u[1:]   # u₁, u₂, u₃, ..., uₙ
 
     f_ = f[1:]  # we throw-away zeroth frequency to match the dimension.
     fmin = f_[(up <= threshold) & (un > threshold)].min()
@@ -47,6 +49,37 @@ def rainbowplot(
     norm=colors.Normalize(),
     win=None, ssx=1, ssy=1
 ):
+    """
+    Plot time-domain evolution of a complex-valued field in false color.
+
+    Produces a plot that displays the amplitude and the instantaneous
+    frequency of a complex-valued field on a coordinate-domain plot in a more
+    or less the same way it works in optics: instantaneous frequency is
+    represented by color of a point and intensity of the field corresponds to
+    the intensity of a point.
+
+    Parameters
+    ----------
+
+    x : array_like, float, 1×nx
+        Horizontal coordinate scale.
+    y : array_like, float, 1×ny
+        Vertical coordinate scale.
+    z : array_like, complex, ny×nx
+        Complex-valued field
+    fmin, fmax : float
+        Minimum and maximum frequency for color mapping. `fmin` is painted
+        with red and `fmax` is painted with violet.
+    norm : instance of matplotlib.colors.Norm
+        Amplitude normalizer. Linear `matplotlib.colors.Normalize` by default.
+    win : float
+        Width of a window in windowed Fourier transform. 1% of the coordinate
+        range by default.
+    ssx, ssy : int
+        Sub-sampling factor of the output image in horizontal and vertical
+        direction respectively.
+    """
+
     # Allocate the output image.
     nx_in = len(x)
     ny_in = len(y)
@@ -56,7 +89,7 @@ def rainbowplot(
 
     # Window size chosen as 1/32 of the original x range by default.
     if not win:
-        win = (max(x) - min(x)) / 32
+        win = WIN_DEFAULT * (x.max() - x.min())
 
     # Compute the frequency scale of the signal.
     dx = x[1] - x[0]
@@ -82,7 +115,7 @@ def rainbowplot(
     # a good idea to pad this region a bit (around 20% of the frequency
     # range), which allows fmin and fmax to be painted with a pronounced red
     # and violet and not to dilute them due to transition to white.
-    pad_f = (fmax - fmin) / 5
+    pad_f = SAT_FREQ_PADDING * (fmax - fmin)
     sat_scale = _sigma(f - fmin + pad_f) - _sigma(f - fmax - pad_f)
 
     # Convert this to RGB.
