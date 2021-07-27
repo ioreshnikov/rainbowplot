@@ -127,8 +127,8 @@ def rainbowplot(
 
     # For every point in the sub-sampled image we compute a windowed Fourier
     # transform and get a local spectrum of the signal. By assigning a hue to
-    # a frequency and using spectral power as the color weight and then
-    # averaging we compute an RGB color of an individual pixel.
+    # a frequency using spectral power as the color weight and then averaging
+    # we compute an RGB color of an individual pixel.
     for xi, x0 in enumerate(x[::ssx]):
         # Put the signal in a window.
         window = np.exp(-(x - x0)**2 / win**2)
