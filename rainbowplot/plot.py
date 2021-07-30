@@ -6,7 +6,7 @@ from numpy.fft import fftfreq, fftshift, ifft
 
 
 HUE_RED = 0.00
-HUE_VIOLET = 0.75
+HUE_VIOLET = 0.80
 SAT_FREQ_PADDING = 1/5
 WIN_DEFAULT = 1/100
 
@@ -51,7 +51,20 @@ def _estimate_frequency_range(f, z, norm):
     fmin = f_[(up <= threshold) & (un > threshold)].min()
     fmax = f_[(up >= threshold) & (un < threshold)].max()
 
+    # Add a bit of padding
+    pad = 0.1 * (fmax - fmin)
+
     return fmin, fmax
+
+
+def _linear_hue_scale(f, fmin, fmax):
+    """
+    A simple linear hue mapping that uniformly maps frequency range
+    [fₘᵢₙ, fₘₐₓ] onto [HUE_RED, HUE_VIOLET].
+    """
+    hue_scale = (HUE_VIOLET - HUE_RED) * (f - fmin) / (fmax - fmin) + HUE_RED
+    hue_scale = np.clip(hue_scale, HUE_RED, HUE_VIOLET)
+    return hue_scale
 
 
 def rainbowplot(
@@ -74,18 +87,24 @@ def rainbowplot(
 
     x : array_like, float, 1×nx
         Horizontal coordinate scale.
+
     y : array_like, float, 1×ny
         Vertical coordinate scale.
+
     z : array_like, complex, ny×nx
         Complex-valued field
+
     fmin, fmax : float
         Minimum and maximum frequency for color mapping. `fmin` is painted
         with red and `fmax` is painted with violet.
+
     norm : instance of matplotlib.colors.Norm
         Amplitude normalizer. Linear `matplotlib.colors.Normalize` by default.
+
     win : float
         Width of a window in windowed Fourier transform. 1% of the coordinate
         range by default.
+
     ssx, ssy : int
         Sub-sampling factor of the output image in horizontal and vertical
         direction respectively.
@@ -96,7 +115,7 @@ def rainbowplot(
     ny_in = len(y)
     nx_out = int(nx_in / ssx)
     ny_out = int(ny_in / ssy)
-    im = np.zeros((nx_out, ny_out, 3), dtype=float)
+    im = np.zeros((ny_out, nx_out, 3), dtype=float)
 
     # Window size chosen as 1/32 of the original x range by default.
     if not win:
@@ -116,8 +135,7 @@ def rainbowplot(
 
     # Prepare the hue scale. We color the minimal frequency as red (hue = 0.0)
     # and the maximal frequency as violet (around hue = 0.75).
-    hue_scale = HUE_VIOLET * (f - fmin) / (fmax - fmin) + HUE_RED
-    hue_scale = np.clip(hue_scale, HUE_RED, HUE_VIOLET)
+    hue_scale = _linear_hue_scale(f, fmin, fmax)
 
     # Prepare the saturation scale. We are going to use 0 everywhere outside
     # of the defined frequency range and 1 within with a smooth transition
@@ -141,15 +159,18 @@ def rainbowplot(
     # a frequency using spectral power as the color weight and then averaging
     # we compute an RGB color of an individual pixel.
     for xi, x0 in enumerate(x[::ssx]):
-        # Put the signal in a window.
+        # Construct a window that's centered around xₒ and repeats for every
+        # evolution step.
         window = np.exp(-(x - x0)**2 / win**2)
-        zw = window * z[::ssy]
+        zw = window * z[::ssy, :]
 
         # Compute the spectral power to be used as hue weight.
-        pw = fftshift(ifft(zw, axis=1))
+        pw = fftshift(ifft(zw, axis=1), axes=(1,))
         pw = abs(pw)**2
+        pw /= pw.max()
 
-        rgb = pw @ rgb_scale / np.sum(pw, axis=1)[:, np.newaxis]
+        nw = pw.sum(axis=1)
+        rgb = pw @ rgb_scale / nw[:, np.newaxis]
         im[:, xi, :] = rgb
 
     # At this point the image has the correct colors, but not the correct
@@ -164,6 +185,9 @@ def rainbowplot(
     hsv = colors.rgb_to_hsv(rgb)           # (required by this step)
     hsv[:, 2] = np.ravel(n)                # put the norm as value
     rgb = colors.hsv_to_rgb(hsv)           # back to rgb
-    im = rgb.reshape((nx_out, ny_out, 3))  # back to the original shape
+    im = rgb.reshape((ny_out, nx_out, 3))  # back to the original shape
 
-    return plt.imshow(im, extent=[x.min(), x.max(), y.min(), y.max()])
+    return plt.imshow(
+        np.flipud(im),
+        aspect="auto",
+        extent=[x.min(), x.max(), y.min(), y.max()])
