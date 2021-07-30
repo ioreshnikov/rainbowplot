@@ -18,20 +18,31 @@ def _sigma(x):
     return 1 / (1 + np.exp(-x))
 
 
-def _estimate_frequency_range(f, z):
+def _estimate_frequency_range(f, z, norm):
     """
     Estimate minimum and maximum frequency of a given field.
     """
-    u = fftshift(ifft(z, axis=1), axes=(1, ))
+
+    # For estimation we should prepare some sort of a characteristic spectrum.
+    # We do it in a straightforward way -- for each evolution step we take a
+    # spectral density, sum it all over the evolution steps and then normalize
+    # it first to [0, 1] range and then with a norm preferred for this
+    # specific plot.
+
+    u = fftshift(
+        ifft(z, axis=1),
+        axes=(1, ))
     u = abs(u)**2
     u = u.sum(axis=0)
+    u /= u.max()
+    u = norm(u)
 
-    # We assume that the spectrum is bounded and we're looking for the
+    # We then assume that the spectrum is bounded and we're looking for the
     # left-most position where the spectrum becomes greater than the threshold
     # and the right-most position where it again becomes smaller. Those two we
     # use as the estimates for the spectral width.
 
-    threshold = 0.10 * u.max()
+    threshold = 0.10  # hardcoded, but why not
 
     up = u[:-1]  # u₀, u₁, u₂, ..., uₙ₋₁
     un = u[1:]   # u₁, u₂, u₃, ..., uₙ
@@ -46,7 +57,7 @@ def _estimate_frequency_range(f, z):
 def rainbowplot(
     x, y, z,
     fmin=None, fmax=None,
-    norm=colors.Normalize(),
+    norm=colors.Normalize(vmin=0.0, vmax=1.0),
     win=None, ssx=1, ssy=1
 ):
     """
@@ -99,7 +110,7 @@ def rainbowplot(
     # If either minimum or maximum frequency was not passed we estimate it from
     # the spectral density.
     if fmin is None or fmax is None:
-        fmin_est, fmax_est = _estimate_frequency_range(f, z)
+        fmin_est, fmax_est = _estimate_frequency_range(f, z, norm)
         fmin = fmin_est if fmin is None else fmin
         fmax = fmax_est if fmax is None else fmax
 
@@ -144,7 +155,10 @@ def rainbowplot(
     # At this point the image has the correct colors, but not the correct
     # intensity. Let's fix this by one more time transforming to HSV and using
     # the normalized absolute value of the field as the V(alue) in HSV space.
-    n = norm(abs(z[::ssy, ::ssx]))
+    z = z[::ssy, ::ssx]
+    z = abs(z)**2
+    z /= z.max()
+    n = norm(z)
 
     rgb = im.reshape(-1, 3)                # unravel into a n x 3 matrix
     hsv = colors.rgb_to_hsv(rgb)           # (required by this step)
