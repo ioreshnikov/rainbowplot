@@ -1,6 +1,7 @@
+import logging
+
 import matplotlib.pyplot as plt
 import matplotlib.colors as colors
-
 import numpy as np
 from numpy.fft import fftfreq, fftshift, ifft
 
@@ -53,6 +54,9 @@ def _estimate_frequency_range(f, z, norm):
 
     # Add a bit of padding
     pad = 0.1 * (fmax - fmin)
+    fmin = fmin - pad
+    fmax = fmax + pad
+    logging.info("estimated ωₘᵢₙ={:.1f}, ωₘₐₓ={:.1f}".format(fmin, fmax))
 
     return fmin, fmax
 
