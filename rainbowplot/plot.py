@@ -52,12 +52,7 @@ def _estimate_frequency_range(f, z, norm):
     fmin = f_[(up <= threshold) & (un > threshold)].min()
     fmax = f_[(up >= threshold) & (un < threshold)].max()
 
-    # Add a bit of padding
-    pad = 0.1 * (fmax - fmin)
-    fmin = fmin - pad
-    fmax = fmax + pad
     logging.info("estimated ωₘᵢₙ={:.1f}, ωₘₐₓ={:.1f}".format(fmin, fmax))
-
     return fmin, fmax
 
 
@@ -69,6 +64,49 @@ def _linear_hue_scale(f, fmin, fmax):
     hue_scale = (HUE_VIOLET - HUE_RED) * (f - fmin) / (fmax - fmin) + HUE_RED
     hue_scale = np.clip(hue_scale, HUE_RED, HUE_VIOLET)
     return hue_scale
+
+
+def _steplike_sat_scale(f, fmin, fmax):
+    """
+    Linear saturation scale.
+
+    0 everywhere outside of the defined frequency range and 1 within with a
+    smooth transition between the regions. This give us vivid colors within
+    the frequency range and pure white outside.
+
+    From playing with the code we know it's a good idea to pad this region a
+    bit (around 20% of the frequency range), which allows fmin and fmax to be
+    painted with a pronounced red and violet and not to dilute them due to
+    transition to white.
+    """
+    pad_f = SAT_FREQ_PADDING * (fmax - fmin)
+    return _sigma(f - fmin + pad_f) - _sigma(f - fmax - pad_f)
+
+
+def _rgb_scale(f, fmin, fmax):
+    """
+    Prepare the RGB color scale.
+    """
+    # Prepare the hue scale. We color the minimal frequency as red (hue = 0.0)
+    # and the maximal frequency as violet (around hue = 0.75).
+    hue_scale = _linear_hue_scale(f, fmin, fmax)
+
+    # Prepare the saturation scale. We are going to use 0 everywhere outside
+    # of the defined frequency range and 1 within with a smooth transition
+    # between the regions. This will give us vivid colors within the frequency
+    # range and pure white outside. # From playing with the code we know it's
+    # a good idea to pad this region a bit (around 20% of the frequency
+    # range), which allows fmin and fmax to be painted with a pronounced red
+    # and violet and not to dilute them due to transition to white.
+    pad_f = SAT_FREQ_PADDING * (fmax - fmin)
+    sat_scale = _sigma(f - fmin + pad_f) - _sigma(f - fmax - pad_f)
+
+    # Convert this to RGB.
+    hsv_scale = np.ones((len(f), 3))
+    hsv_scale[:, 0] = hue_scale
+    hsv_scale[:, 1] = sat_scale
+
+    return colors.hsv_to_rgb(hsv_scale)
 
 
 def rainbowplot(
@@ -137,26 +175,7 @@ def rainbowplot(
         fmin = fmin_est if fmin is None else fmin
         fmax = fmax_est if fmax is None else fmax
 
-    # Prepare the hue scale. We color the minimal frequency as red (hue = 0.0)
-    # and the maximal frequency as violet (around hue = 0.75).
-    hue_scale = _linear_hue_scale(f, fmin, fmax)
-
-    # Prepare the saturation scale. We are going to use 0 everywhere outside
-    # of the defined frequency range and 1 within with a smooth transition
-    # between the regions. This will give us vivid colors within the frequency
-    # range and pure white outside. # From playing with the code we know it's
-    # a good idea to pad this region a bit (around 20% of the frequency
-    # range), which allows fmin and fmax to be painted with a pronounced red
-    # and violet and not to dilute them due to transition to white.
-    pad_f = SAT_FREQ_PADDING * (fmax - fmin)
-    sat_scale = _sigma(f - fmin + pad_f) - _sigma(f - fmax - pad_f)
-
-    # Convert this to RGB.
-    hsv_scale = np.ones((nx_in, 3))
-    hsv_scale[:, 0] = hue_scale
-    hsv_scale[:, 1] = sat_scale
-
-    rgb_scale = colors.hsv_to_rgb(hsv_scale)
+    rgb_scale = _rgb_scale(f, fmin, fmax)
 
     # For every point in the sub-sampled image we compute a windowed Fourier
     # transform and get a local spectrum of the signal. By assigning a hue to
@@ -188,7 +207,7 @@ def rainbowplot(
     rgb = im.reshape(-1, 3)                # unravel into a n x 3 matrix
     hsv = colors.rgb_to_hsv(rgb)           # (required by this step)
     hsv[:, 2] = np.ravel(n)                # put the norm as value
-    rgb = colors.hsv_to_rgb(hsv)           # back to rgb
+    rgb = colors.hsv_to_rgb(hsv)           # back to RGB
     im = rgb.reshape((ny_out, nx_out, 3))  # back to the original shape
 
     return plt.imshow(
